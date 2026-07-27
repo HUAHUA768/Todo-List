@@ -62,9 +62,11 @@ namespace
     HWND g_maximizeButton = nullptr;
     HWND g_closeButton = nullptr;
     HWND g_addButton = nullptr;
+    HWND g_addCancelButton = nullptr;
     HWND g_pendingList = nullptr;
     HWND g_completedList = nullptr;
     HFONT g_iconFont = nullptr;
+    bool g_addFormVisible = false;
 
     std::vector<std::unique_ptr<TodoItem>> g_items;
     bool g_internalStateChange = false;
@@ -97,6 +99,35 @@ namespace
                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe MDL2 Assets");
         }
         SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(g_iconFont), TRUE);
+    }
+
+    void Relayout(HWND hwnd);
+
+    void UpdateAddButtonLabel()
+    {
+        SetWindowTextW(g_addButton, g_addFormVisible ? L"收起" : L"添加待办");
+    }
+
+    void SetAddFormVisible(HWND hwnd, bool visible)
+    {
+        g_addFormVisible = visible;
+
+        const int show = visible ? SW_SHOW : SW_HIDE;
+        ShowWindow(g_titleLabel, show);
+        ShowWindow(g_titleEdit, show);
+        ShowWindow(g_dateLabel, show);
+        ShowWindow(g_datePicker, show);
+        ShowWindow(g_timeCheck, show);
+        ShowWindow(g_timePicker, show);
+        ShowWindow(g_addCancelButton, show);
+
+        UpdateAddButtonLabel();
+        Relayout(hwnd);
+
+        if (visible)
+        {
+            SetFocus(g_titleEdit);
+        }
     }
 
     int ListViewGetItemCount(HWND listView);
@@ -313,31 +344,31 @@ namespace
         AddTodoToList(g_pendingList, g_items.back().get(), true);
 
         SetWindowTextW(g_titleEdit, L"");
+        SetAddFormVisible(owner, false);
         SendMessageW(g_titleEdit, EM_SETSEL, 0, -1);
-        SetFocus(g_titleEdit);
     }
 
     void CreateInputControls(HWND hwnd)
     {
         const int top = kTitleBarHeight + kMargin;
-        g_titleLabel = CreateWindowExW(0, L"STATIC", L"事项", WS_CHILD | WS_VISIBLE,
+        g_titleLabel = CreateWindowExW(0, L"STATIC", L"事项", WS_CHILD,
                                        kMargin, top + 4, kLabelWidth, kControlHeight, hwnd, nullptr, nullptr, nullptr);
 
-        g_titleEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+        g_titleEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_TABSTOP | ES_AUTOHSCROLL,
                                       kMargin + kLabelWidth + kGap, top,
                                       270, kControlHeight, hwnd, reinterpret_cast<HMENU>(kIdTitleEdit), nullptr, nullptr);
 
-        g_dateLabel = CreateWindowExW(0, L"STATIC", L"日期", WS_CHILD | WS_VISIBLE,
+        g_dateLabel = CreateWindowExW(0, L"STATIC", L"日期", WS_CHILD,
                                       kMargin, top + 34 + 4, kLabelWidth, kControlHeight, hwnd, nullptr, nullptr, nullptr);
 
-        g_datePicker = CreateWindowExW(0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | DTS_SHORTDATEFORMAT,
+        g_datePicker = CreateWindowExW(0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_TABSTOP | DTS_SHORTDATEFORMAT,
                                        kMargin + kLabelWidth + kGap, top + 34,
                                        150, 200, hwnd, reinterpret_cast<HMENU>(kIdDatePicker), nullptr, nullptr);
 
-        g_timeCheck = CreateWindowExW(0, L"BUTTON", L"包含时间", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        g_timeCheck = CreateWindowExW(0, L"BUTTON", L"包含时间", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX,
                                       kMargin, top + 68, 96, kControlHeight, hwnd, reinterpret_cast<HMENU>(kIdTimeCheck), nullptr, nullptr);
 
-        g_timePicker = CreateWindowExW(0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | DTS_TIMEFORMAT,
+        g_timePicker = CreateWindowExW(0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_TABSTOP | DTS_TIMEFORMAT,
                                        kMargin + 96 + kGap, top + 66,
                                        kTimeFieldWidth, 200, hwnd, reinterpret_cast<HMENU>(kIdTimePicker), nullptr, nullptr);
 
@@ -366,16 +397,21 @@ namespace
                                         hwnd, reinterpret_cast<HMENU>(1012), nullptr, nullptr);
         ApplyIconFont(g_closeButton);
 
-        g_addButton = CreateWindowExW(0, L"BUTTON", L"添加", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-                                      kMargin + 96 + kGap + kTimeFieldWidth + kGap + 80 + kGap, top + 66,
+        g_addButton = CreateWindowExW(0, L"BUTTON", L"添加待办", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                                      kMargin, top,
                                       kButtonWidth, kControlHeight + 2, hwnd, reinterpret_cast<HMENU>(kIdAddButton), nullptr, nullptr);
 
+        g_addCancelButton = CreateWindowExW(0, L"BUTTON", L"取消", WS_CHILD | WS_TABSTOP,
+                                            kMargin + 96 + kGap, top + 104,
+                                            96, kControlHeight + 2, hwnd, reinterpret_cast<HMENU>(1007), nullptr, nullptr);
+
         UpdateTimePickerEnabled();
+        SetAddFormVisible(hwnd, false);
     }
 
     void CreateListSection(HWND hwnd)
     {
-        const int sectionTop = kTitleBarHeight + 104;
+        const int sectionTop = kTitleBarHeight + kMargin + (g_addFormVisible ? 180 : 40);
         RECT client{};
         GetClientRect(hwnd, &client);
         const int sectionWidth = client.right - client.left - kMargin * 2;
@@ -413,21 +449,35 @@ namespace
 
         const int top = kTitleBarHeight + kMargin;
         const int contentWidth = width - kMargin * 2;
-        const int titleWidth = std::max(180, contentWidth - (kLabelWidth + kGap + kCaptionButtonWidth * 4 + kGap * 4));
+        const int titleWidth = std::max(180, contentWidth - (kButtonWidth + kGap));
 
-        MoveWindow(g_titleLabel, kMargin, top + 4, kLabelWidth, kControlHeight, TRUE);
-        MoveWindow(g_titleEdit, kMargin + kLabelWidth + kGap, top, titleWidth, kControlHeight, TRUE);
+        MoveWindow(g_addButton, kMargin, top, kButtonWidth, kControlHeight + 2, TRUE);
         MoveWindow(g_topMostCheck, width - kMargin - kCaptionButtonWidth * 4, 2, kCaptionButtonWidth, kTitleBarHeight - 4, TRUE);
         MoveWindow(g_minimizeButton, width - kMargin - kCaptionButtonWidth * 3, 2, kCaptionButtonWidth, kTitleBarHeight - 4, TRUE);
         MoveWindow(g_maximizeButton, width - kMargin - kCaptionButtonWidth * 2, 2, kCaptionButtonWidth, kTitleBarHeight - 4, TRUE);
         MoveWindow(g_closeButton, width - kMargin - kCaptionButtonWidth, 2, kCaptionButtonWidth, kTitleBarHeight - 4, TRUE);
-        MoveWindow(g_dateLabel, kMargin, top + 34 + 4, kLabelWidth, kControlHeight, TRUE);
-        MoveWindow(g_datePicker, kMargin + kLabelWidth + kGap, top + 34, kDateFieldWidth, 200, TRUE);
-        MoveWindow(g_timeCheck, kMargin, top + 68, 96, kControlHeight, TRUE);
-        MoveWindow(g_timePicker, kMargin + 96 + kGap, top + 66, kTimeFieldWidth, 200, TRUE);
-        MoveWindow(g_addButton, kMargin + 96 + kGap + kTimeFieldWidth + kGap, top + 66, kButtonWidth, kControlHeight + 2, TRUE);
+        if (g_addFormVisible)
+        {
+            MoveWindow(g_titleLabel, kMargin, top + 40 + 4, kLabelWidth, kControlHeight, TRUE);
+            MoveWindow(g_titleEdit, kMargin + kLabelWidth + kGap, top + 40, titleWidth, kControlHeight, TRUE);
+            MoveWindow(g_dateLabel, kMargin, top + 76 + 4, kLabelWidth, kControlHeight, TRUE);
+            MoveWindow(g_datePicker, kMargin + kLabelWidth + kGap, top + 76, kDateFieldWidth, 200, TRUE);
+            MoveWindow(g_timeCheck, kMargin, top + 110, 96, kControlHeight, TRUE);
+            MoveWindow(g_timePicker, kMargin + 96 + kGap, top + 108, kTimeFieldWidth, 200, TRUE);
+            MoveWindow(g_addCancelButton, kMargin + 96 + kGap, top + 144, 96, kControlHeight + 2, TRUE);
+        }
+        else
+        {
+            MoveWindow(g_titleLabel, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_titleEdit, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_dateLabel, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_datePicker, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_timeCheck, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_timePicker, 0, 0, 0, 0, TRUE);
+            MoveWindow(g_addCancelButton, 0, 0, 0, 0, TRUE);
+        }
 
-        const int sectionTop = top + 104;
+        const int sectionTop = kTitleBarHeight + kMargin + (g_addFormVisible ? 180 : 40);
         const int sectionWidth = width - kMargin * 2;
         const int pendingListHeight = MeasureListHeight(g_pendingList);
         const int completedListHeight = MeasureListHeight(g_completedList);
@@ -457,7 +507,20 @@ namespace
 
             if (controlId == kIdAddButton && notification == BN_CLICKED)
             {
-                AddTodoFromInputs(hwnd);
+                if (g_addFormVisible)
+                {
+                    AddTodoFromInputs(hwnd);
+                }
+                else
+                {
+                    SetAddFormVisible(hwnd, true);
+                }
+                return 0;
+            }
+
+            if (controlId == 1007 && notification == BN_CLICKED)
+            {
+                SetAddFormVisible(hwnd, false);
                 return 0;
             }
 
