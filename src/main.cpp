@@ -62,6 +62,7 @@ namespace
     HWND g_maximizeButton = nullptr;
     HWND g_closeButton = nullptr;
     HWND g_addButton = nullptr;
+    HWND g_addConfirmButton = nullptr;
     HWND g_addCancelButton = nullptr;
     HWND g_pendingList = nullptr;
     HWND g_completedList = nullptr;
@@ -119,6 +120,7 @@ namespace
         ShowWindow(g_datePicker, show);
         ShowWindow(g_timeCheck, show);
         ShowWindow(g_timePicker, show);
+        ShowWindow(g_addConfirmButton, show);
         ShowWindow(g_addCancelButton, show);
 
         UpdateAddButtonLabel();
@@ -401,6 +403,10 @@ namespace
                                       kMargin, top,
                                       kButtonWidth, kControlHeight + 2, hwnd, reinterpret_cast<HMENU>(kIdAddButton), nullptr, nullptr);
 
+        g_addConfirmButton = CreateWindowExW(0, L"BUTTON", L"添加", WS_CHILD | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                             kMargin, top + 104,
+                             96, kControlHeight + 2, hwnd, reinterpret_cast<HMENU>(1008), nullptr, nullptr);
+
         g_addCancelButton = CreateWindowExW(0, L"BUTTON", L"取消", WS_CHILD | WS_TABSTOP,
                                             kMargin + 96 + kGap, top + 104,
                                             96, kControlHeight + 2, hwnd, reinterpret_cast<HMENU>(1007), nullptr, nullptr);
@@ -507,14 +513,13 @@ namespace
 
             if (controlId == kIdAddButton && notification == BN_CLICKED)
             {
-                if (g_addFormVisible)
-                {
-                    AddTodoFromInputs(hwnd);
-                }
-                else
-                {
-                    SetAddFormVisible(hwnd, true);
-                }
+                SetAddFormVisible(hwnd, !g_addFormVisible);
+                return 0;
+            }
+
+            if (controlId == 1008 && notification == BN_CLICKED)
+            {
+                AddTodoFromInputs(hwnd);
                 return 0;
             }
 
